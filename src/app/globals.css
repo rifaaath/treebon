@@ -5,33 +5,33 @@
 
 @layer base {
   :root {
-    --background: 210 30% 96%; /* Very light blue-grey */
-    --foreground: 208 25% 23%; /* Dark slate blue */
+    --background: 210 15% 94%; /* Softer, less bright light grey-blue */
+    --foreground: 210 15% 20%; /* Dark grey-blue for text */
 
-    --card: 210 30% 98%; /* Slightly off-white with a hint of blue-grey */
-    --card-foreground: 208 25% 23%;
+    --card: 210 15% 97%; /* Slightly lighter than background, very soft */
+    --card-foreground: 210 15% 20%;
 
-    --popover: 210 30% 98%;
-    --popover-foreground: 208 25% 23%;
+    --popover: 210 15% 97%;
+    --popover-foreground: 210 15% 20%;
 
-    --primary: 208 25% 23%; /* Dark slate blue */
-    --primary-foreground: 210 30% 96%; /* Very light blue-grey */
+    --primary: 210 20% 30%; /* Strong, dark blue-grey for primary text/elements */
+    --primary-foreground: 210 15% 96%; /* Light text for on-primary elements */
 
-    --secondary: 208 25% 45%; /* Medium slate blue, lighter than primary */
-    --secondary-foreground: 210 30% 96%; /* Very light blue-grey */
+    --secondary: 210 15% 55%; /* Medium, softer blue-grey */
+    --secondary-foreground: 210 15% 96%;
 
-    --muted: 210 25% 88%; /* Light grey-blue */
-    --muted-foreground: 208 25% 35%; /* Slightly lighter dark slate blue */
+    --muted: 210 15% 90%; /* Lighter grey-blue for muted elements */
+    --muted-foreground: 210 15% 45%; /* Medium-light grey-blue for text on muted */
 
-    --accent: 205 30% 50%; /* Medium slate blue for accents */
-    --accent-foreground: 210 30% 96%; /* Very light blue-grey */
+    --accent: 205 30% 50%; /* Kept as requested - Medium slate blue */
+    --accent-foreground: 210 15% 98%; /* Very light text for on-accent elements */
 
-    --destructive: 0 70% 50%; /* Adjusted for better contrast with new theme */
+    --destructive: 0 60% 50%; /* Slightly softer red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 210 20% 80%; /* Slightly darker grey-blue for borders */
-    --input: 210 30% 97%; /* Very light blue-grey for input background */
-    --ring: 205 30% 50%; /* Accent slate blue for focus rings */
+    --border: 210 15% 80%; /* Subtle border */
+    --input: 210 15% 96%; /* Very light grey-blue input background */
+    --ring: 205 30% 50%; /* Focus ring uses accent color */
 
     --radius: 0.5rem;
 
