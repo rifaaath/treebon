@@ -67,18 +67,18 @@ async function handleCommand(chatId: number, text: string): Promise<string> {
   switch (command) {
     case '/help':
       return `Available commands:
-        \`/help\` - Show this help message
-        \`/availability YYYY-MM-DD\` - Check slot availability
-        \`/bookings YYYY-MM-DD\` - List bookings for a date
-        \`/confirm BOOKING_ID\` - Confirm a booking
-        \`/cancel BOOKING_ID [Optional reason]\` - Cancel a booking
-        \`/pending BOOKING_ID\` - Mark a booking as pending`;
+\`/help\` - Shows available commands
+\`/availability YYYY-MM-DD\` - Checks availability for a specific date
+\`/bookings YYYY-MM-DD\` - Lists bookings for a specific date
+\`/confirm BOOKING_ID\` - Confirms a booking
+\`/cancel BOOKING_ID [Optional reason]\` - Cancels a booking
+\`/pending BOOKING_ID\` - Marks a booking as pending`;
 
     case '/availability':
-      if (args.length < 1) return "Please provide a date. Usage: `/availability YYYY-MM-DD`";
+      if (args.length < 1) return "Usage: `/availability YYYY-MM-DD`";
       try {
         const targetDate = parseISO(args[0]);
-        if (!isValidDate(targetDate)) return `Invalid date format: ${args[0]}. Please use YYYY-MM-DD.`;
+        if (!isValidDate(targetDate)) return `Invalid date format: \`${args[0]}\`. Please use YYYY-MM-DD.`;
         const availability: DailyAvailability = await getAvailabilityForDate(targetDate);
         const formattedDate = format(targetDate, "PPP");
         return `Availability for *${formattedDate}*:
@@ -86,14 +86,14 @@ async function handleCommand(chatId: number, text: string): Promise<string> {
           Evening: \`${availability.evening}\``;
       } catch (e) {
         console.error("Error in /availability command:", e);
-        return "Error fetching availability. Please check the date format.";
+        return "Error fetching availability. Ensure date is YYYY-MM-DD.";
       }
 
     case '/bookings':
-      if (args.length < 1) return "Please provide a date. Usage: `/bookings YYYY-MM-DD`";
+      if (args.length < 1) return "Usage: `/bookings YYYY-MM-DD`";
       try {
         const targetDate = parseISO(args[0]);
-        if (!isValidDate(targetDate)) return `Invalid date format: ${args[0]}. Please use YYYY-MM-DD.`;
+        if (!isValidDate(targetDate)) return `Invalid date format: \`${args[0]}\`. Please use YYYY-MM-DD.`;
         const bookings: Booking[] = await getBookingsForDate(targetDate);
         const formattedDate = format(targetDate, "PPP");
         if (bookings.length === 0) return `No bookings found for *${formattedDate}*.`;
@@ -104,28 +104,44 @@ async function handleCommand(chatId: number, text: string): Promise<string> {
         return response;
       } catch (e) {
         console.error("Error in /bookings command:", e);
-        return "Error fetching bookings. Please check the date format.";
+        return "Error fetching bookings. Ensure date is YYYY-MM-DD.";
       }
 
     case '/confirm':
-    case '/cancel':
-    case '/pending':
-      if (args.length < 1) return `Please provide a booking ID. Usage: \`${command} BOOKING_ID [reason for cancel]\``;
-      const bookingId = args[0];
-      let newStatus: Booking['status'];
-      if (command === '/confirm') newStatus = 'confirmed';
-      else if (command === '/cancel') newStatus = 'cancelled';
-      else newStatus = 'pending'; // for /pending
-
-      const adminNotes = command === '/cancel' && args.length > 1 ? args.slice(1).join(" ") : undefined;
-
+      if (args.length < 1) return "Usage: `/confirm BOOKING_ID`";
+      const bookingIdConfirm = args[0];
       try {
-        const result = await updateBookingStatus(bookingId, newStatus, adminNotes, `telegram_admin_bot_user:${chatId}`);
-        if (result.success) return `Booking \`${bookingId}\` status updated to \`${newStatus}\`. ${adminNotes ? "Notes: "+adminNotes : ""}`;
-        return `Failed to update booking \`${bookingId}\`: ${result.error || 'Unknown error'}`;
+        const result = await updateBookingStatus(bookingIdConfirm, 'confirmed', undefined, `telegram_admin_bot_user:${chatId}`);
+        if (result.success) return `Booking \`${bookingIdConfirm}\` status updated to \`confirmed\`.`;
+        return `Failed to confirm booking \`${bookingIdConfirm}\`: ${result.error || 'Unknown error'}`;
       } catch (e) {
-        console.error(`Error in ${command} command for ${bookingId}:`, e);
-        return `Error updating booking ${bookingId}.`;
+        console.error(`Error in /confirm command for ${bookingIdConfirm}:`, e);
+        return `Error confirming booking ${bookingIdConfirm}.`;
+      }
+
+    case '/cancel':
+      if (args.length < 1) return "Usage: `/cancel BOOKING_ID [Optional reason]`";
+      const bookingIdCancel = args[0];
+      const adminNotes = args.length > 1 ? args.slice(1).join(" ") : undefined;
+      try {
+        const result = await updateBookingStatus(bookingIdCancel, 'cancelled', adminNotes, `telegram_admin_bot_user:${chatId}`);
+        if (result.success) return `Booking \`${bookingIdCancel}\` status updated to \`cancelled\`. ${adminNotes ? "Notes: "+adminNotes : ""}`;
+        return `Failed to cancel booking \`${bookingIdCancel}\`: ${result.error || 'Unknown error'}`;
+      } catch (e) {
+        console.error(`Error in /cancel command for ${bookingIdCancel}:`, e);
+        return `Error cancelling booking ${bookingIdCancel}.`;
+      }
+
+    case '/pending':
+      if (args.length < 1) return "Usage: `/pending BOOKING_ID`";
+      const bookingIdPending = args[0];
+      try {
+        const result = await updateBookingStatus(bookingIdPending, 'pending', undefined, `telegram_admin_bot_user:${chatId}`);
+        if (result.success) return `Booking \`${bookingIdPending}\` status updated to \`pending\`.`;
+        return `Failed to mark booking \`${bookingIdPending}\` as pending: ${result.error || 'Unknown error'}`;
+      } catch (e) {
+        console.error(`Error in /pending command for ${bookingIdPending}:`, e);
+        return `Error marking booking ${bookingIdPending} as pending.`;
       }
 
     default:
@@ -163,16 +179,14 @@ export async function POST(request: NextRequest) {
       return new NextResponse('OK', { status: 200 });
     } else {
       console.log('Received non-message update or message without text/chat ID, ignoring.');
-      return new NextResponse('OK - Update not processed', { status: 200 });
+      // It's important to still return a 200 OK to Telegram for non-message updates to prevent retries.
+      return new NextResponse('OK - Update not processed (not a user text message)', { status: 200 });
     }
   } catch (error) {
     console.error('Error processing Telegram update in webhook:', error);
-    // Attempt to notify admin if possible, or just log
-    if (error instanceof Error && update && update.message && update.message.chat && update.message.chat.id) {
-        await sendTelegramMessage(update.message.chat.id, `Sorry, an internal error occurred: ${error.message}`);
-    }
+    // Avoid sending a message back if chatId is not available (e.g. error during request.json())
+    // Telegram expects a 200 OK even for errors in your processing, to stop retries.
+    // If you send back a 500, Telegram will keep trying to send the update.
     return new NextResponse('OK - Internal error processing update', { status: 200 });
   }
 }
-
-    
