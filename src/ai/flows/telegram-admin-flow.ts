@@ -5,7 +5,6 @@
  * This flow processes incoming Telegram messages, interprets admin commands,
  * and interacts with booking services.
  *
- * - processTelegramMessageFlow - Handles message processing.
  */
 
 import {ai} from '@/ai/genkit';
@@ -168,8 +167,6 @@ const updateBookingStatusTool = ai.defineTool(
   },
   async (input) => {
     try {
-      // For Telegram, we might not have a specific admin user ID from the context easily,
-      // so using a generic identifier or enhancing this later.
       const result = await updateBookingStatus(input.bookingId, input.newStatus, input.adminNotes, `telegram_admin_bot`);
       return {
         bookingId: input.bookingId,
@@ -201,16 +198,24 @@ Your response MUST be a JSON object. The JSON object must have a single key "rep
 For example: {"reply": "This is my response to the user."}
 
 Tool Usage Guidelines:
-- When asked about availability (e.g., "Is tomorrow free?", "Availability for 2024-12-25"), use the 'getAvailabilityTool'. You MUST convert any relative dates like "tomorrow", "next Monday", "today" into an absolute 'yyyy-MM-dd' format before calling the tool. For example, if today is 2024-07-21, "tomorrow" becomes "2024-07-22", and "next Monday" becomes "2024-07-29".
+- When asked about availability (e.g., "Is tomorrow free?", "Availability for 2024-12-25"), use the 'getAvailabilityTool'. You MUST convert any relative dates like "tomorrow", "next Monday", "today" into an absolute 'yyyy-MM-dd' format before calling the tool.
 - When asked to list bookings for a date (e.g., "Show bookings for next Friday", "Any bookings on 2024-11-10?"), use the 'getBookingsForDateTool'. Again, convert relative dates to 'yyyy-MM-dd'.
 - When asked to update a booking's status (e.g., "Confirm booking 123xyz", "Cancel booking abc987 reason: client request", "Mark booking foo123 as pending"), use the 'updateBookingStatusTool'. You need an exact booking ID and the new status ('pending', 'confirmed', 'cancelled'). If notes are provided, include them.
+
+Tool Result Handling:
+- When a tool (like 'getAvailabilityTool' or 'getBookingsForDateTool') successfully executes, it will return a 'message' field in its output.
+- Your primary task after a tool call is to relay this 'message' field directly to the user.
+- The 'reply' field in your JSON response MUST be exactly the 'message' string provided by the tool.
+- Do NOT add any prefix like "Fetching..." or "Okay, here are the bookings...".
+- Do NOT summarize or rephrase the tool's 'message'.
+- If the tool's 'message' indicates an error (e.g., "Invalid date format", "Sorry, I encountered an error"), your 'reply' MUST be that error message from the tool.
+- Example: If 'getBookingsForDateTool' returns \`{"message": "Found 2 bookings for June 5th, 2025: ..."}\`, your response MUST be \`{"reply": "Found 2 bookings for June 5th, 2025: ..."}\`.
 
 Interaction Style:
 - If a date is mentioned, try to parse it to 'yyyy-MM-dd'. If you cannot confidently parse a date or if it's ambiguous, ask for clarification in 'yyyy-MM-dd' format, and provide this clarification as the value for the "reply" field in your JSON response.
 - If a booking ID for an update is missing or unclear, ask the admin to provide the exact booking ID as the value for the "reply" field.
 - Respond concisely and professionally.
-- After a tool is used, ALWAYS use the 'message' property from the tool's output as the basis for your "reply" field. For example, if getAvailabilityTool returns a message property like "Availability for Jul 23rd, 2024: Morning: available Evening: booked", your JSON response's "reply" field should directly use or accurately summarize this message. If a tool indicates an error in its message property, relay that error clearly in the "reply" field.
-- If an action is successful, confirm it using the tool's message in the "reply" field. If there's an error reported by the tool, state the error message from the tool's message property in the "reply" field.
+- If an action is successful (e.g. status update), confirm it using the tool's message in the "reply" field.
 - Do not make up information. Only use the provided tools. If you cannot fulfill a request with the tools, state this clearly in the "reply" field. For example: {"reply": "I can only check availability, list bookings, or update booking statuses. For other requests, please use the admin panel."}
 - If converting relative dates like "today", "tomorrow", "next Monday/Tuesday/etc.":
     - "today" is ${format(startOfToday(), 'yyyy-MM-dd')}
@@ -222,7 +227,7 @@ Interaction Style:
     - "next Friday" is ${format(getNextFriday(startOfToday()), 'yyyy-MM-dd')}
     - "next Saturday" is ${format(getNextSaturday(startOfToday()), 'yyyy-MM-dd')}
     - "next Sunday" is ${format(getNextSunday(startOfToday()), 'yyyy-MM-dd')}
-    (adjust similarly for other days of the week, e.g., "next Tuesday", "next Wednesday" and so on, calculating from today which is ${format(startOfToday(), 'yyyy-MM-dd')})
+    (adjust similarly for other days of the week, calculating from today which is ${format(startOfToday(), 'yyyy-MM-dd')})
 - ALWAYS formulate your final response as the value for the "reply" field in the JSON output described above.
 
 User message: {{{text}}}
@@ -236,9 +241,9 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
   try {
     const {output} = await telegramAdminPrompt(input);
 
-    if (!output || typeof output.reply !== 'string') { // Check if output is null or reply is not a string
-      console.error('LLM output was null, or output.reply was not a string. This indicates an issue with the prompt or tool result processing by the LLM. Input was:', input, 'LLM Raw Output was:', output);
-      return { reply: "I'm sorry, I couldn't fully process your request or generate a suitable reply from the AI at this moment. Please try rephrasing or be more specific." };
+    if (!output || typeof output.reply !== 'string') {
+      console.error('LLM output was null, or output.reply was not a string or was empty. Input was:', input, 'LLM Raw Output was:', output);
+      return { reply: "I'm sorry, the AI generated an invalid or empty response. Please try rephrasing." };
     }
     console.log('LLM generated reply for chat ID', input.chatId, ':', output.reply);
     return { reply: output.reply };
@@ -249,7 +254,11 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
       if (error instanceof Error) {
           if (error.message.includes("blocked by the safety filter")) {
             errorMessage = "Your request could not be processed due to safety settings. Please rephrase your request.";
-          } else if (error.message.includes("Failed to parse") || error.message.includes("parse error") || error.message.includes("Invalid JSON") || error.message.includes("Schema validation failed")) {
+          } else if (error.message.includes("Schema validation failed") || error.message.includes("INVALID_ARGUMENT")) {
+            // This specific error indicates the LLM didn't produce the expected JSON.
+            errorMessage = "I had trouble understanding the AI's response format. It might be an issue with the AI model generating unexpected output. Please try rephrasing your request. Developer note: Schema validation failed for LLM output.";
+            console.error('Detailed schema validation/LLM output error:', error.cause || error.message);
+          } else if (error.message.includes("Failed to parse") || error.message.includes("parse error") || error.message.includes("Invalid JSON")) {
             errorMessage = "There was an issue with interpreting results from an internal tool or understanding the input, possibly due to an unexpected AI response format. Please check your input or try again. If the problem persists, the AI might be having trouble forming a valid response.";
           } else if (error.message.includes("deadline exceeded") || error.message.includes("timeout")) {
             errorMessage = "The request took too long to process. Please try again shortly."
@@ -261,11 +270,9 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
       } else if (typeof error === 'string' && error.includes("blocked by the safety filter")) {
          errorMessage = "Your request could not be processed due to safety settings. Please rephrase your request.";
       }
-      // Also log the full error object for more details if it's not a standard Error instance
       if (!(error instanceof Error)) {
         console.error('Full error object in processTelegramMessageFlow catch:', error);
       }
       return { reply: errorMessage };
   }
 }
-
