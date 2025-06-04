@@ -1,0 +1,96 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 30% 96%; /* Very light blue-grey */
+    --foreground: 208 25% 23%; /* Dark slate blue */
+
+    --card: 210 30% 98%; /* Slightly off-white with a hint of blue-grey */
+    --card-foreground: 208 25% 23%;
+
+    --popover: 210 30% 98%;
+    --popover-foreground: 208 25% 23%;
+
+    --primary: 208 25% 23%; /* Dark slate blue */
+    --primary-foreground: 210 30% 96%; /* Very light blue-grey */
+
+    --secondary: 208 25% 45%; /* Medium slate blue, lighter than primary */
+    --secondary-foreground: 210 30% 96%; /* Very light blue-grey */
+
+    --muted: 210 25% 88%; /* Light grey-blue */
+    --muted-foreground: 208 25% 35%; /* Slightly lighter dark slate blue */
+
+    --accent: 205 30% 50%; /* Medium slate blue for accents */
+    --accent-foreground: 210 30% 96%; /* Very light blue-grey */
+
+    --destructive: 0 70% 50%; /* Adjusted for better contrast with new theme */
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 210 20% 80%; /* Slightly darker grey-blue for borders */
+    --input: 210 30% 97%; /* Very light blue-grey for input background */
+    --ring: 205 30% 50%; /* Accent slate blue for focus rings */
+
+    --radius: 0.5rem;
+
+    --chart-1: 205 50% 50%;
+    --chart-2: 210 40% 60%;
+    --chart-3: 200 45% 40%;
+    --chart-4: 215 35% 70%;
+    --chart-5: 208 30% 30%;
+  }
+
+  .dark {
+    --background: 208 25% 15%; /* Very dark slate blue */
+    --foreground: 210 30% 90%; /* Light grey-blue */
+
+    --card: 208 25% 18%; 
+    --card-foreground: 210 30% 90%;
+
+    --popover: 208 25% 18%;
+    --popover-foreground: 210 30% 90%;
+
+    --primary: 205 30% 60%; /* Lighter slate blue */
+    --primary-foreground: 208 25% 10%; /* Darkest slate blue for text on primary */
+
+    --secondary: 208 25% 35%; /* Darker Muted slate blue */
+    --secondary-foreground: 210 30% 90%; 
+
+    --muted: 208 20% 30%; 
+    --muted-foreground: 210 25% 75%; 
+
+    --accent: 205 35% 70%; /* Lighter slate blue for accent */
+    --accent-foreground: 208 25% 15%; /* Very dark slate blue for text on accent */
+
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 208 20% 25%;
+    --input: 208 20% 22%;
+    --ring: 205 35% 70%; 
+    
+    --chart-1: 205 50% 60%;
+    --chart-2: 210 40% 70%;
+    --chart-3: 200 45% 50%;
+    --chart-4: 215 35% 80%;
+    --chart-5: 208 30% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Styling for default .rdp-day_today (from calendar.tsx: bg-accent text-accent-foreground) */
+  /* Styling for default .rdp-day_selected (from calendar.tsx: bg-primary text-primary-foreground) */
+  /* Styling for default .rdp-day_disabled (from calendar.tsx: text-muted-foreground opacity-50) */
+  /* These default styles from shadcn/ui's calendar will take precedence for selected/today/disabled states, which is generally desired. */
+}
