@@ -197,18 +197,21 @@ const telegramAdminPrompt = ai.definePrompt({
 Your primary role is to help admins manage bookings and check resort availability.
 The current date is ${format(new Date(), 'yyyy-MM-dd')}.
 
+Your response MUST be a JSON object. The JSON object must have a single key "reply", and its value should be a string containing the text message to send back to the Telegram user.
+For example: {"reply": "This is my response to the user."}
+
 Tool Usage Guidelines:
 - When asked about availability (e.g., "Is tomorrow free?", "Availability for 2024-12-25"), use the 'getAvailabilityTool'. You MUST convert any relative dates like "tomorrow", "next Monday", "today" into an absolute 'yyyy-MM-dd' format before calling the tool. For example, if today is 2024-07-21, "tomorrow" becomes "2024-07-22", and "next Monday" becomes "2024-07-29".
 - When asked to list bookings for a date (e.g., "Show bookings for next Friday", "Any bookings on 2024-11-10?"), use the 'getBookingsForDateTool'. Again, convert relative dates to 'yyyy-MM-dd'.
 - When asked to update a booking's status (e.g., "Confirm booking 123xyz", "Cancel booking abc987 reason: client request", "Mark booking foo123 as pending"), use the 'updateBookingStatusTool'. You need an exact booking ID and the new status ('pending', 'confirmed', 'cancelled'). If notes are provided, include them.
 
 Interaction Style:
-- If a date is mentioned, try to parse it to 'yyyy-MM-dd'. If you cannot confidently parse a date or if it's ambiguous, ask for clarification in 'yyyy-MM-dd' format.
-- If a booking ID for an update is missing or unclear, ask the admin to provide the exact booking ID.
+- If a date is mentioned, try to parse it to 'yyyy-MM-dd'. If you cannot confidently parse a date or if it's ambiguous, ask for clarification in 'yyyy-MM-dd' format, and provide this clarification as the value for the "reply" field in your JSON response.
+- If a booking ID for an update is missing or unclear, ask the admin to provide the exact booking ID as the value for the "reply" field.
 - Respond concisely and professionally.
-- After a tool is used, ALWAYS use the 'message' property from the tool's output as the basis for your reply. For example, if getAvailabilityTool returns a message property like "Availability for Jul 23rd, 2024: Morning: available Evening: booked", your reply should directly use or accurately summarize this message. If a tool indicates an error in its message property, relay that error clearly.
-- If an action is successful, confirm it using the tool's message. If there's an error reported by the tool, state the error message from the tool's message property.
-- Do not make up information. Only use the provided tools. If you cannot fulfill a request with the tools, say so clearly (e.g., "I can only check availability, list bookings, or update booking statuses. For other requests, please use the admin panel.").
+- After a tool is used, ALWAYS use the 'message' property from the tool's output as the basis for your "reply" field. For example, if getAvailabilityTool returns a message property like "Availability for Jul 23rd, 2024: Morning: available Evening: booked", your JSON response's "reply" field should directly use or accurately summarize this message. If a tool indicates an error in its message property, relay that error clearly in the "reply" field.
+- If an action is successful, confirm it using the tool's message in the "reply" field. If there's an error reported by the tool, state the error message from the tool's message property in the "reply" field.
+- Do not make up information. Only use the provided tools. If you cannot fulfill a request with the tools, state this clearly in the "reply" field. For example: {"reply": "I can only check availability, list bookings, or update booking statuses. For other requests, please use the admin panel."}
 - If converting relative dates like "today", "tomorrow", "next Monday/Tuesday/etc.":
     - "today" is ${format(startOfToday(), 'yyyy-MM-dd')}
     - "tomorrow" is ${format(addDays(startOfToday(), 1), 'yyyy-MM-dd')}
@@ -220,6 +223,7 @@ Interaction Style:
     - "next Saturday" is ${format(getNextSaturday(startOfToday()), 'yyyy-MM-dd')}
     - "next Sunday" is ${format(getNextSunday(startOfToday()), 'yyyy-MM-dd')}
     (adjust similarly for other days of the week, e.g., "next Tuesday", "next Wednesday" and so on, calculating from today which is ${format(startOfToday(), 'yyyy-MM-dd')})
+- ALWAYS formulate your final response as the value for the "reply" field in the JSON output described above.
 
 User message: {{{text}}}
 Chat ID: {{{chatId}}}
@@ -232,9 +236,9 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
   try {
     const {output} = await telegramAdminPrompt(input);
 
-    if (!output || !output.reply) {
-      console.error('LLM output or reply was null/undefined from telegramAdminPrompt. This might indicate an issue with the prompt or tool result processing by the LLM. Input was:', input);
-      return { reply: "I'm sorry, I couldn't fully process your request or generate a suitable reply from the AI. Please try rephrasing or be more specific." };
+    if (!output || typeof output.reply !== 'string') { // Check if output is null or reply is not a string
+      console.error('LLM output was null, or output.reply was not a string. This indicates an issue with the prompt or tool result processing by the LLM. Input was:', input, 'LLM Raw Output was:', output);
+      return { reply: "I'm sorry, I couldn't fully process your request or generate a suitable reply from the AI at this moment. Please try rephrasing or be more specific." };
     }
     console.log('LLM generated reply for chat ID', input.chatId, ':', output.reply);
     return { reply: output.reply };
@@ -245,8 +249,8 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
       if (error instanceof Error) {
           if (error.message.includes("blocked by the safety filter")) {
             errorMessage = "Your request could not be processed due to safety settings. Please rephrase your request.";
-          } else if (error.message.includes("Failed to parse") || error.message.includes("parse error") || error.message.includes("Invalid JSON")) {
-            errorMessage = "There was an issue with interpreting results from an internal tool or understanding the input. Please check your input or try again.";
+          } else if (error.message.includes("Failed to parse") || error.message.includes("parse error") || error.message.includes("Invalid JSON") || error.message.includes("Schema validation failed")) {
+            errorMessage = "There was an issue with interpreting results from an internal tool or understanding the input, possibly due to an unexpected AI response format. Please check your input or try again. If the problem persists, the AI might be having trouble forming a valid response.";
           } else if (error.message.includes("deadline exceeded") || error.message.includes("timeout")) {
             errorMessage = "The request took too long to process. Please try again shortly."
           } else if (error.message.includes("No valid candidate") || error.message.includes("model did not provide a candidate")) {
@@ -256,6 +260,10 @@ export async function processTelegramMessageFlow(input: TelegramMessageInput): P
           }
       } else if (typeof error === 'string' && error.includes("blocked by the safety filter")) {
          errorMessage = "Your request could not be processed due to safety settings. Please rephrase your request.";
+      }
+      // Also log the full error object for more details if it's not a standard Error instance
+      if (!(error instanceof Error)) {
+        console.error('Full error object in processTelegramMessageFlow catch:', error);
       }
       return { reply: errorMessage };
   }
